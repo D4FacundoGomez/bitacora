@@ -1,0 +1,4 @@
+# Credenciales de Google Drive (uso local, nunca subir)
+scripts/drive_credentials.json
+scripts/drive_token.json
+scripts/__pycache__/
