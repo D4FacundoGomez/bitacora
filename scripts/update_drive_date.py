@@ -31,6 +31,7 @@ from datetime import date
 from pathlib import Path
 
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -75,21 +76,32 @@ def get_credentials():
     creds = None
     if TOKEN_PATH.exists():
         creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            logger.info("Token vencido, refrescando...")
+    if creds and creds.valid:
+        return creds
+
+    if creds and creds.expired and creds.refresh_token:
+        logger.info("Token vencido, refrescando...")
+        try:
             creds.refresh(Request())
-        else:
-            if not CREDENTIALS_PATH.exists():
-                logger.error(
-                    "Falta %s. Seguí los pasos del encabezado del script.", CREDENTIALS_PATH
-                )
-                sys.exit(1)
-            logger.info("Sin token guardado, abriendo navegador para autorizar...")
-            flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
-            creds = flow.run_local_server(port=0)
-            logger.info("Autorización completada.")
-        TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+            TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+            return creds
+        except RefreshError as exc:
+            if "invalid_grant" not in str(exc):
+                raise
+            logger.warning(
+                "El refresh token fue revocado o venció; se requiere autorizar de nuevo."
+            )
+
+    if not CREDENTIALS_PATH.exists():
+        logger.error(
+            "Falta %s. Seguí los pasos del encabezado del script.", CREDENTIALS_PATH
+        )
+        sys.exit(1)
+    logger.info("Abriendo navegador para autorizar Google Drive...")
+    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
+    creds = flow.run_local_server(port=0)
+    logger.info("Autorización completada.")
+    TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
     return creds
 
 
